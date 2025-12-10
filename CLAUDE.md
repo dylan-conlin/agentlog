@@ -2,7 +2,6 @@
 
 ---
 
-@.orch/CLAUDE.md
 
 ---
 
