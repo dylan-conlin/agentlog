@@ -70,6 +70,8 @@ agentlog --ai-help  # Machine-readable command metadata
 
 ## JSONL Schema
 
+**Full specification:** `docs/jsonl-schema.md` (v1.0.0)
+
 **Required fields:**
 ```json
 {
@@ -90,6 +92,7 @@ agentlog --ai-help  # Machine-readable command metadata
 
 ## Key Files
 
+- `docs/jsonl-schema.md` - JSONL schema specification (v1.0.0)
 - `.kb/investigations/2025-12-10-design-agentlog-architecture.md` - Full design doc
 - `cmd/` - CLI commands (cobra)
 - `internal/` - Core logic
