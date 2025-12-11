@@ -5,14 +5,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Global flags
-	jsonOutput bool
-	aiHelp     bool
+	jsonOutput   bool
+	aiHelp       bool
+	pathOverride string
 )
 
 // CommandMetadata provides machine-readable command information for AI agents
@@ -75,11 +77,22 @@ func init() {
 	// Global flags available to all commands
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format for programmatic use")
 	rootCmd.PersistentFlags().BoolVar(&aiHelp, "ai-help", false, "Output machine-readable command metadata")
+	rootCmd.PersistentFlags().StringVar(&pathOverride, "path", "", "Override project path (for monorepo/subdir support)")
 }
 
 // IsJSONOutput returns whether JSON output is enabled
 func IsJSONOutput() bool {
 	return jsonOutput
+}
+
+// GetPathOverride returns the path override if set, empty string otherwise
+func GetPathOverride() string {
+	return pathOverride
+}
+
+// GetErrorsPath returns the full path to errors.jsonl for a given base directory
+func GetErrorsPath(baseDir string) string {
+	return filepath.Join(baseDir, ".agentlog", "errors.jsonl")
 }
 
 // IsTTY returns whether stdout is a terminal
@@ -102,6 +115,7 @@ func printAIHelpTo(w io.Writer) {
 		GlobalFlags: map[string]string{
 			"--json":    "Output in JSON format for programmatic use",
 			"--ai-help": "Output this machine-readable command metadata",
+			"--path":    "Override project path (for monorepo/subdir support)",
 		},
 		Commands: []CommandInfo{
 			{
