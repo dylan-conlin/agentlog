@@ -139,6 +139,100 @@ func TestStackString(t *testing.T) {
 	}
 }
 
+func TestDetectStackMonorepoSubdirectories(t *testing.T) {
+	tests := []struct {
+		name           string
+		files          []string
+		expectedStack  Stack
+		expectedDetect bool
+		expectedMarker string
+	}{
+		{
+			name:           "backend/ with go.mod detected as Go",
+			files:          []string{"backend/go.mod"},
+			expectedStack:  Go,
+			expectedDetect: true,
+			expectedMarker: "backend/go.mod",
+		},
+		{
+			name:           "api/ with go.mod detected as Go",
+			files:          []string{"api/go.mod"},
+			expectedStack:  Go,
+			expectedDetect: true,
+			expectedMarker: "api/go.mod",
+		},
+		{
+			name:           "server/ with requirements.txt detected as Python",
+			files:          []string{"server/requirements.txt"},
+			expectedStack:  Python,
+			expectedDetect: true,
+			expectedMarker: "server/requirements.txt",
+		},
+		{
+			name:           "backend/ with config/routes.rb detected as Ruby (Rails)",
+			files:          []string{"backend/config/routes.rb"},
+			expectedStack:  Ruby,
+			expectedDetect: true,
+			expectedMarker: "backend/config/routes.rb",
+		},
+		{
+			name:           "root level takes priority over subdirectory",
+			files:          []string{"package.json", "backend/go.mod"},
+			expectedStack:  TypeScript,
+			expectedDetect: true,
+			expectedMarker: "package.json",
+		},
+		{
+			name:           "first subdirectory match wins (backend before api)",
+			files:          []string{"backend/go.mod", "api/requirements.txt"},
+			expectedStack:  Go,
+			expectedDetect: true,
+			expectedMarker: "backend/go.mod",
+		},
+		{
+			name:           "no detection when subdirectory has no marker files",
+			files:          []string{"backend/random.txt"},
+			expectedStack:  TypeScript,
+			expectedDetect: false,
+			expectedMarker: "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create temp directory
+			tmpDir := t.TempDir()
+
+			// Create marker files (including parent directories for nested paths)
+			for _, file := range tc.files {
+				path := filepath.Join(tmpDir, file)
+				// Create parent directory if needed
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatalf("failed to create parent directory for %s: %v", file, err)
+				}
+				if err := os.WriteFile(path, []byte(""), 0644); err != nil {
+					t.Fatalf("failed to create test file %s: %v", file, err)
+				}
+			}
+
+			// Test detection
+			result := DetectStack(tmpDir)
+
+			if result.Stack != tc.expectedStack {
+				t.Errorf("expected stack %s, got %s", tc.expectedStack, result.Stack)
+			}
+
+			if result.Detected != tc.expectedDetect {
+				t.Errorf("expected detected=%v, got %v", tc.expectedDetect, result.Detected)
+			}
+
+			if result.MarkerFile != tc.expectedMarker {
+				t.Errorf("expected marker file %q, got %q", tc.expectedMarker, result.MarkerFile)
+			}
+		})
+	}
+}
+
 func TestStackMarkerFile(t *testing.T) {
 	tests := []struct {
 		stack    Stack
