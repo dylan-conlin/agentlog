@@ -1009,3 +1009,193 @@ end
 		t.Error("Installed should be false without --install flag")
 	}
 }
+
+// ========== Node.js snippet tests ==========
+
+func TestNodeSnippet_Exists(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Node.js snippet must exist and be distinct from TypeScript browser snippet
+	if snippet == "" {
+		t.Fatal("Node.js snippet must exist")
+	}
+
+	// Should NOT use browser APIs
+	if strings.Contains(snippet, "window.onerror") {
+		t.Error("Node.js snippet should not use window.onerror (browser API)")
+	}
+
+	if strings.Contains(snippet, "fetch") {
+		t.Error("Node.js snippet should not use fetch to POST (should write directly)")
+	}
+}
+
+func TestNodeSnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("Node.js snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestNodeSnippet_ProcessErrorHandlers(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must capture uncaught exceptions via process.on('uncaughtException')
+	if !strings.Contains(snippet, "uncaughtException") {
+		t.Error("Node.js snippet must capture uncaughtException")
+	}
+
+	// Must capture unhandled rejections via process.on('unhandledRejection')
+	if !strings.Contains(snippet, "unhandledRejection") {
+		t.Error("Node.js snippet must capture unhandledRejection")
+	}
+
+	// Must use process.on()
+	if !strings.Contains(snippet, "process.on") {
+		t.Error("Node.js snippet must use process.on() for error handlers")
+	}
+}
+
+func TestNodeSnippet_DirectFileWrite(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must write directly to .agentlog/errors.jsonl
+	if !strings.Contains(snippet, ".agentlog/errors.jsonl") && !strings.Contains(snippet, ".agentlog") {
+		t.Error("Node.js snippet must write to .agentlog/errors.jsonl")
+	}
+
+	// Must use fs module for file writing
+	hasFs := strings.Contains(snippet, "appendFileSync") ||
+		strings.Contains(snippet, "writeFileSync") ||
+		strings.Contains(snippet, "fs.") ||
+		strings.Contains(snippet, "from 'fs'") ||
+		strings.Contains(snippet, "from \"fs\"") ||
+		strings.Contains(snippet, "require('fs')") ||
+		strings.Contains(snippet, "require(\"fs\")")
+	if !hasFs {
+		t.Error("Node.js snippet must use Node.js fs module for file writing")
+	}
+}
+
+func TestNodeSnippet_DevModeCheck(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must check for development mode (should no-op in production)
+	hasDevCheck := strings.Contains(snippet, "NODE_ENV") ||
+		strings.Contains(snippet, "production")
+	if !hasDevCheck {
+		t.Error("Node.js snippet should check for development/production mode")
+	}
+}
+
+func TestNodeSnippet_SourceIsWorkerOrBackend(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Source should be 'worker' or 'backend' for Node.js services
+	hasCorrectSource := strings.Contains(snippet, "'worker'") ||
+		strings.Contains(snippet, "\"worker\"") ||
+		strings.Contains(snippet, "'backend'") ||
+		strings.Contains(snippet, "\"backend\"")
+	if !hasCorrectSource {
+		t.Error("Node.js snippet source should be 'worker' or 'backend'")
+	}
+}
+
+func TestNodeSnippet_StackTraceCapture(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must capture stack traces
+	if !strings.Contains(snippet, "stack") {
+		t.Error("Node.js snippet must capture stack traces")
+	}
+}
+
+func TestNodeSnippet_LogFunction(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must provide a callable log function for integration with other loggers (like pino)
+	hasLogFunction := strings.Contains(snippet, "logError") ||
+		strings.Contains(snippet, "logAgentError") ||
+		strings.Contains(snippet, "function log") ||
+		strings.Contains(snippet, "const log")
+	if !hasLogFunction {
+		t.Error("Node.js snippet must provide a callable log function for logger integration")
+	}
+}
+
+func TestNodeSnippet_MessageTruncation(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must truncate message per schema (500 chars)
+	if !strings.Contains(snippet, "500") {
+		t.Error("Node.js snippet must truncate message to 500 characters per schema")
+	}
+}
+
+func TestNodeSnippet_StackTraceTruncation(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// Must truncate stack trace per schema (2048 bytes)
+	if !strings.Contains(snippet, "2048") {
+		t.Error("Node.js snippet must truncate stack_trace to 2048 bytes per schema")
+	}
+}
+
+func TestInitCommand_StackOverride_Node(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create package.json but override to node
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}"), 0644)
+
+	result, err := runInit(tmpDir, false, "node", false)
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	if result.Stack != "node" {
+		t.Errorf("expected overridden stack node, got %s", result.Stack)
+	}
+
+	// Snippet should be the Node.js snippet
+	if strings.Contains(result.Snippet, "window.onerror") {
+		t.Error("Node.js snippet should not contain window.onerror")
+	}
+
+	if !strings.Contains(result.Snippet, "process.on") {
+		t.Error("Node.js snippet should contain process.on")
+	}
+}
+
+func TestInitInstall_Node_CreatesCaptureFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Use --stack node to override
+	result, err := runInit(tmpDir, false, "node", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check capture file was created
+	captureFile := filepath.Join(tmpDir, ".agentlog", "capture.ts")
+	content, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("capture.ts not created: %v", err)
+	}
+
+	// Should be Node.js specific (not browser)
+	if strings.Contains(string(content), "window.onerror") {
+		t.Error("Node.js capture.ts should not contain window.onerror")
+	}
+
+	if !strings.Contains(string(content), "process.on") {
+		t.Error("Node.js capture.ts should contain process.on")
+	}
+
+	if !result.Installed {
+		t.Error("Installed should be true")
+	}
+}

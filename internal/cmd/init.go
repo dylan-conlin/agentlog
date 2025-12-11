@@ -176,6 +176,8 @@ func installSnippets(dir string, stack string) ([]InstallAction, error) {
 		return installRubySnippets(dir)
 	case "typescript":
 		return installTypeScriptSnippets(dir)
+	case "node":
+		return installNodeSnippets(dir)
 	case "go":
 		return installGoSnippets(dir)
 	case "python":
@@ -286,6 +288,26 @@ func installTypeScriptSnippets(dir string) ([]InstallAction, error) {
 	capturePath := filepath.Join(agentlogDir, "capture.ts")
 	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
 		if err := os.WriteFile(capturePath, []byte(typescriptCapture), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create capture.ts: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: ".agentlog/capture.ts", Operation: "create"})
+	}
+
+	return actions, nil
+}
+
+// installNodeSnippets creates a capture.ts file for Node.js
+func installNodeSnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	agentlogDir := filepath.Join(dir, ".agentlog")
+	if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
+	}
+
+	capturePath := filepath.Join(agentlogDir, "capture.ts")
+	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
+		if err := os.WriteFile(capturePath, []byte(nodeCapture), 0644); err != nil {
 			return nil, fmt.Errorf("failed to create capture.ts: %w", err)
 		}
 		actions = append(actions, InstallAction{Path: ".agentlog/capture.ts", Operation: "create"})
@@ -445,6 +467,8 @@ func getSnippet(stack string) string {
 	switch stack {
 	case "typescript":
 		return snippetTypeScript
+	case "node":
+		return snippetNode
 	case "go":
 		return snippetGo
 	case "python":
@@ -498,6 +522,93 @@ export const agentlogPlugin = () => ({
     });
   },
 });`
+
+const snippetNode = `// agentlog error handler for Node.js - add to your app entry point
+// Works with BullMQ workers, scrapers, CLI tools, and any Node.js service
+import { appendFileSync, mkdirSync, existsSync } from 'fs';
+
+const AGENTLOG_FILE = '.agentlog/errors.jsonl';
+
+// Skip in production
+const isProduction = process.env.NODE_ENV === 'production';
+
+interface AgentlogEntry {
+  timestamp: string;
+  source: string;
+  error_type: string;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+// Log an error to agentlog - call this directly or use with your logger (pino, winston, etc.)
+export function logError(
+  errorType: string,
+  message: string,
+  context?: Record<string, unknown>
+): void {
+  if (isProduction) return;
+
+  const entry: AgentlogEntry = {
+    timestamp: new Date().toISOString(),
+    source: 'worker',
+    error_type: errorType,
+    message: String(message).slice(0, 500),
+  };
+
+  if (context) {
+    // Truncate stack_trace if present
+    if (typeof context.stack_trace === 'string') {
+      context.stack_trace = context.stack_trace.slice(0, 2048);
+    }
+    entry.context = context;
+  }
+
+  try {
+    if (!existsSync('.agentlog')) {
+      mkdirSync('.agentlog', { recursive: true });
+    }
+    appendFileSync(AGENTLOG_FILE, JSON.stringify(entry) + '\n');
+  } catch {
+    // Silently fail - don't crash the app for logging
+  }
+}
+
+// Initialize agentlog: captures uncaught exceptions and unhandled rejections
+export function initAgentlog(): void {
+  if (isProduction) return;
+
+  process.on('uncaughtException', (err: Error) => {
+    logError('UNCAUGHT_EXCEPTION', err.message, {
+      stack_trace: err.stack,
+    });
+    // Re-throw to let the process crash as expected
+    throw err;
+  });
+
+  process.on('unhandledRejection', (reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    logError('UNHANDLED_REJECTION', message, {
+      stack_trace: stack,
+    });
+  });
+}
+
+// Pino integration example:
+// import pino from 'pino';
+// const logger = pino({
+//   hooks: {
+//     logMethod(args, method, level) {
+//       if (level >= 50) { // error level
+//         logError('LOG_ERROR', args[0]?.msg || String(args[0]));
+//       }
+//       method.apply(this, args);
+//     }
+//   }
+// });
+
+// Call at application startup
+initAgentlog();`
 
 const snippetGo = `// agentlog error handler - add to your main.go
 package main
@@ -822,4 +933,94 @@ if (typeof window !== 'undefined') {
   window.onunhandledrejection = (e) =>
     log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
 }
+`
+
+const nodeCapture = `// agentlog:installed - Import this in your Node.js app entry point
+// Usage: import './.agentlog/capture';
+// Works with BullMQ workers, scrapers, CLI tools, and any Node.js service
+
+import { appendFileSync, mkdirSync, existsSync } from 'fs';
+
+const AGENTLOG_FILE = '.agentlog/errors.jsonl';
+
+// Skip in production
+const isProduction = process.env.NODE_ENV === 'production';
+
+interface AgentlogEntry {
+  timestamp: string;
+  source: string;
+  error_type: string;
+  message: string;
+  context?: Record<string, unknown>;
+}
+
+// Log an error to agentlog - call this directly or use with your logger (pino, winston, etc.)
+export function logError(
+  errorType: string,
+  message: string,
+  context?: Record<string, unknown>
+): void {
+  if (isProduction) return;
+
+  const entry: AgentlogEntry = {
+    timestamp: new Date().toISOString(),
+    source: 'worker',
+    error_type: errorType,
+    message: String(message).slice(0, 500),
+  };
+
+  if (context) {
+    // Truncate stack_trace if present
+    if (typeof context.stack_trace === 'string') {
+      context.stack_trace = context.stack_trace.slice(0, 2048);
+    }
+    entry.context = context;
+  }
+
+  try {
+    if (!existsSync('.agentlog')) {
+      mkdirSync('.agentlog', { recursive: true });
+    }
+    appendFileSync(AGENTLOG_FILE, JSON.stringify(entry) + '\n');
+  } catch {
+    // Silently fail - don't crash the app for logging
+  }
+}
+
+// Initialize agentlog: captures uncaught exceptions and unhandled rejections
+export function initAgentlog(): void {
+  if (isProduction) return;
+
+  process.on('uncaughtException', (err: Error) => {
+    logError('UNCAUGHT_EXCEPTION', err.message, {
+      stack_trace: err.stack,
+    });
+    // Re-throw to let the process crash as expected
+    throw err;
+  });
+
+  process.on('unhandledRejection', (reason: unknown) => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    const stack = reason instanceof Error ? reason.stack : undefined;
+    logError('UNHANDLED_REJECTION', message, {
+      stack_trace: stack,
+    });
+  });
+}
+
+// Pino integration example:
+// import pino from 'pino';
+// const logger = pino({
+//   hooks: {
+//     logMethod(args, method, level) {
+//       if (level >= 50) { // error level
+//         logError('LOG_ERROR', args[0]?.msg || String(args[0]));
+//       }
+//       method.apply(this, args);
+//     }
+//   }
+// });
+
+// Call at application startup
+initAgentlog();
 `
