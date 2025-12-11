@@ -29,10 +29,13 @@ type DetectionResult struct {
 }
 
 // markerPriority defines the order of marker file checks
+// Order matters: config/routes.rb before package.json ensures Rails apps
+// with npm dependencies are detected as Ruby, not TypeScript
 var markerPriority = []struct {
 	file  string
 	stack Stack
 }{
+	{"config/routes.rb", Ruby}, // Rails-specific, takes priority over package.json
 	{"package.json", TypeScript},
 	{"go.mod", Go},
 	{"pyproject.toml", Python},
