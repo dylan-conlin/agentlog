@@ -220,7 +220,7 @@ func TestCheckHealth(t *testing.T) {
 				return tmpDir
 			},
 			wantStatus: "healthy",
-			wantChecks: 3, // directory, file, jsonl valid
+			wantChecks: 4, // directory, file, jsonl valid, file size
 		},
 		{
 			name: "missing directory",
