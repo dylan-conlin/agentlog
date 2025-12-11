@@ -82,15 +82,19 @@ func generatePrimeSummary() (PrimeSummary, error) {
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
-	// Get current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		self.LogError(".", "GETWD_ERROR", err.Error())
-		return summary, err
+	// Determine base directory (use --path override or cwd)
+	baseDir := GetPathOverride()
+	if baseDir == "" {
+		var err error
+		baseDir, err = os.Getwd()
+		if err != nil {
+			self.LogError(".", "GETWD_ERROR", err.Error())
+			return summary, err
+		}
 	}
 
 	// Read errors using existing function
-	entries, err := readErrors(cwd)
+	entries, err := readErrors(baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			summary.NoLogFile = true

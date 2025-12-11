@@ -56,13 +56,18 @@ func init() {
 }
 
 func runDoctor(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		self.LogError(".", "GETWD_ERROR", err.Error())
-		return fmt.Errorf("failed to get working directory: %w", err)
+	// Determine base directory (use --path override or cwd)
+	baseDir := GetPathOverride()
+	if baseDir == "" {
+		var err error
+		baseDir, err = os.Getwd()
+		if err != nil {
+			self.LogError(".", "GETWD_ERROR", err.Error())
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
 	}
 
-	result := checkHealth(cwd)
+	result := checkHealth(baseDir)
 
 	if IsJSONOutput() {
 		fmt.Fprint(cmd.OutOrStdout(), formatHealthJSON(result))
