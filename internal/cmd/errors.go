@@ -58,15 +58,19 @@ func init() {
 }
 
 func runErrors(cmd *cobra.Command, args []string) error {
-	// Get current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		self.LogError(".", "GETWD_ERROR", err.Error())
-		return fmt.Errorf("failed to get working directory: %w", err)
+	// Determine base directory (use --path override or cwd)
+	baseDir := GetPathOverride()
+	if baseDir == "" {
+		var err error
+		baseDir, err = os.Getwd()
+		if err != nil {
+			self.LogError(".", "GETWD_ERROR", err.Error())
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
 	}
 
 	// Read errors
-	entries, err := readErrors(cwd)
+	entries, err := readErrors(baseDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Fprintln(cmd.OutOrStdout(), "No errors file found. Run 'agentlog init' to set up.")
@@ -85,7 +89,7 @@ func runErrors(cmd *cobra.Command, args []string) error {
 	if errorsSince != "" {
 		sinceTime, err = parseSince(errorsSince)
 		if err != nil {
-			self.LogError(cwd, "INVALID_INPUT", fmt.Sprintf("invalid --since value '%s': %v", errorsSince, err))
+			self.LogError(baseDir, "INVALID_INPUT", fmt.Sprintf("invalid --since value '%s': %v", errorsSince, err))
 			return fmt.Errorf("invalid --since value: %w", err)
 		}
 	}
