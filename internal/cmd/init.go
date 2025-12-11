@@ -13,19 +13,28 @@ import (
 )
 
 var (
-	initForce    bool
-	initStack    string
+	initForce   bool
+	initStack   string
+	initInstall bool
 )
+
+// InstallAction represents a file operation performed during installation
+type InstallAction struct {
+	Path      string `json:"path"`
+	Operation string `json:"operation"` // "create", "append", "insert"
+}
 
 // InitResult contains the result of the init command
 type InitResult struct {
-	Stack       string `json:"stack"`
-	Detected    bool   `json:"detected"`
-	MarkerFile  string `json:"marker_file,omitempty"`
-	DirCreated  bool   `json:"dir_created"`
-	GitIgnored  bool   `json:"gitignore_updated"`
-	SnippetLang string `json:"snippet_language"`
-	Snippet     string `json:"snippet"`
+	Stack          string          `json:"stack"`
+	Detected       bool            `json:"detected"`
+	MarkerFile     string          `json:"marker_file,omitempty"`
+	DirCreated     bool            `json:"dir_created"`
+	GitIgnored     bool            `json:"gitignore_updated"`
+	SnippetLang    string          `json:"snippet_language"`
+	Snippet        string          `json:"snippet"`
+	Installed      bool            `json:"installed"`
+	InstallActions []InstallAction `json:"install_actions,omitempty"`
 }
 
 // initCmd represents the init command
@@ -35,13 +44,18 @@ var initCmd = &cobra.Command{
 	Long: `Initialize agentlog in the current project.
 
 This command will:
-  1. Detect your project's tech stack (TypeScript, Go, Python, Rust)
+  1. Detect your project's tech stack (TypeScript, Go, Python, Rust, Ruby)
   2. Create the .agentlog/ directory
   3. Add .agentlog/errors.jsonl to .gitignore
   4. Print a code snippet to capture errors in your detected language
 
+With --install flag, agentlog will write files directly to your project:
+  - Rails: Creates controller, initializer, adds route, appends to application.js
+  - Other stacks: Creates .agentlog/capture.<ext> file you can import
+
 Examples:
-  agentlog init              # Auto-detect stack and initialize
+  agentlog init              # Auto-detect stack and print snippet
+  agentlog init --install    # Auto-detect and install files
   agentlog init --stack go   # Force Go stack
   agentlog init --json       # Output result as JSON`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,7 +65,7 @@ Examples:
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
-		result, err := runInit(cwd, initForce, initStack)
+		result, err := runInit(cwd, initForce, initStack, initInstall)
 		if err != nil {
 			return err
 		}
@@ -71,11 +85,12 @@ Examples:
 func init() {
 	rootCmd.AddCommand(initCmd)
 	initCmd.Flags().BoolVar(&initForce, "force", false, "Reinitialize even if .agentlog/ already exists")
-	initCmd.Flags().StringVar(&initStack, "stack", "", "Override stack detection (typescript, go, python, rust)")
+	initCmd.Flags().StringVar(&initStack, "stack", "", "Override stack detection (typescript, go, python, rust, ruby)")
+	initCmd.Flags().BoolVar(&initInstall, "install", false, "Install snippets directly to project files")
 }
 
 // runInit performs the init operation and returns the result
-func runInit(dir string, force bool, stackOverride string) (*InitResult, error) {
+func runInit(dir string, force bool, stackOverride string, install bool) (*InitResult, error) {
 	result := &InitResult{}
 
 	// Detect or override stack
@@ -141,7 +156,202 @@ func runInit(dir string, force bool, stackOverride string) (*InitResult, error) 
 	// Get snippet
 	result.Snippet = getSnippet(result.Stack)
 
+	// Install snippets if requested
+	if install {
+		actions, err := installSnippets(dir, result.Stack)
+		if err != nil {
+			return nil, err
+		}
+		result.Installed = true
+		result.InstallActions = actions
+	}
+
 	return result, nil
+}
+
+// installSnippets writes snippet files to the project
+func installSnippets(dir string, stack string) ([]InstallAction, error) {
+	switch stack {
+	case "ruby":
+		return installRubySnippets(dir)
+	case "typescript":
+		return installTypeScriptSnippets(dir)
+	case "go":
+		return installGoSnippets(dir)
+	case "python":
+		return installPythonSnippets(dir)
+	case "rust":
+		return installRustSnippets(dir)
+	default:
+		return installTypeScriptSnippets(dir)
+	}
+}
+
+// installRubySnippets installs Rails-specific files
+func installRubySnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	// 1. Create controller
+	controllerDir := filepath.Join(dir, "app", "controllers")
+	if err := os.MkdirAll(controllerDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create controllers directory: %w", err)
+	}
+
+	controllerPath := filepath.Join(controllerDir, "agentlog_controller.rb")
+	if _, err := os.Stat(controllerPath); os.IsNotExist(err) {
+		if err := os.WriteFile(controllerPath, []byte(rubyController), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create controller: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: "app/controllers/agentlog_controller.rb", Operation: "create"})
+	}
+
+	// 2. Create initializer
+	initializerDir := filepath.Join(dir, "config", "initializers")
+	if err := os.MkdirAll(initializerDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create initializers directory: %w", err)
+	}
+
+	initializerPath := filepath.Join(initializerDir, "agentlog.rb")
+	if _, err := os.Stat(initializerPath); os.IsNotExist(err) {
+		if err := os.WriteFile(initializerPath, []byte(rubyInitializer), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create initializer: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: "config/initializers/agentlog.rb", Operation: "create"})
+	}
+
+	// 3. Add route to config/routes.rb
+	routesPath := filepath.Join(dir, "config", "routes.rb")
+	routesContent, err := os.ReadFile(routesPath)
+	if err == nil && !strings.Contains(string(routesContent), "__agentlog") {
+		// Insert route before the final "end"
+		newContent := insertRouteIntoRailsRoutes(string(routesContent))
+		if err := os.WriteFile(routesPath, []byte(newContent), 0644); err != nil {
+			return nil, fmt.Errorf("failed to update routes.rb: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: "config/routes.rb", Operation: "insert"})
+	}
+
+	// 4. Append frontend JS to app/javascript/application.js
+	jsPath := filepath.Join(dir, "app", "javascript", "application.js")
+	jsContent, err := os.ReadFile(jsPath)
+	if err == nil && !strings.Contains(string(jsContent), "window.onerror") {
+		newContent := string(jsContent) + "\n" + rubyFrontendJS
+		if err := os.WriteFile(jsPath, []byte(newContent), 0644); err != nil {
+			return nil, fmt.Errorf("failed to update application.js: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: "app/javascript/application.js", Operation: "append"})
+	}
+
+	return actions, nil
+}
+
+// insertRouteIntoRailsRoutes inserts the agentlog route before the final 'end'
+func insertRouteIntoRailsRoutes(content string) string {
+	lines := strings.Split(content, "\n")
+	var result []string
+
+	// Find the last 'end' line and insert before it
+	lastEndIdx := -1
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) == "end" {
+			lastEndIdx = i
+			break
+		}
+	}
+
+	if lastEndIdx == -1 {
+		// No 'end' found, just append
+		return content + "\n" + rubyRoute
+	}
+
+	for i, line := range lines {
+		if i == lastEndIdx {
+			result = append(result, "  "+rubyRoute)
+		}
+		result = append(result, line)
+	}
+
+	return strings.Join(result, "\n")
+}
+
+// installTypeScriptSnippets creates a capture.ts file
+func installTypeScriptSnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	agentlogDir := filepath.Join(dir, ".agentlog")
+	if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
+	}
+
+	capturePath := filepath.Join(agentlogDir, "capture.ts")
+	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
+		if err := os.WriteFile(capturePath, []byte(typescriptCapture), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create capture.ts: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: ".agentlog/capture.ts", Operation: "create"})
+	}
+
+	return actions, nil
+}
+
+// installGoSnippets creates a capture.go file
+func installGoSnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	agentlogDir := filepath.Join(dir, ".agentlog")
+	if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
+	}
+
+	capturePath := filepath.Join(agentlogDir, "capture.go")
+	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
+		if err := os.WriteFile(capturePath, []byte(snippetGo), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create capture.go: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: ".agentlog/capture.go", Operation: "create"})
+	}
+
+	return actions, nil
+}
+
+// installPythonSnippets creates a capture.py file
+func installPythonSnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	agentlogDir := filepath.Join(dir, ".agentlog")
+	if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
+	}
+
+	capturePath := filepath.Join(agentlogDir, "capture.py")
+	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
+		if err := os.WriteFile(capturePath, []byte(snippetPython), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create capture.py: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: ".agentlog/capture.py", Operation: "create"})
+	}
+
+	return actions, nil
+}
+
+// installRustSnippets creates a capture.rs file
+func installRustSnippets(dir string) ([]InstallAction, error) {
+	var actions []InstallAction
+
+	agentlogDir := filepath.Join(dir, ".agentlog")
+	if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
+	}
+
+	capturePath := filepath.Join(agentlogDir, "capture.rs")
+	if _, err := os.Stat(capturePath); os.IsNotExist(err) {
+		if err := os.WriteFile(capturePath, []byte(snippetRust), 0644); err != nil {
+			return nil, fmt.Errorf("failed to create capture.rs: %w", err)
+		}
+		actions = append(actions, InstallAction{Path: ".agentlog/capture.rs", Operation: "create"})
+	}
+
+	return actions, nil
 }
 
 // printInitResult prints the init result in human-readable format
@@ -167,13 +377,60 @@ func printInitResult(result *InitResult) {
 
 	fmt.Println()
 
-	// Snippet
-	fmt.Printf("Add this snippet to your %s code:\n\n", capitalize(result.Stack))
-	fmt.Println("---")
-	fmt.Println(result.Snippet)
-	fmt.Println("---")
-	fmt.Println()
-	fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+	// Installation results
+	if result.Installed {
+		fmt.Println("Installed agentlog to your project:")
+		for _, action := range result.InstallActions {
+			switch action.Operation {
+			case "create":
+				fmt.Printf("  Created: %s\n", action.Path)
+			case "append":
+				fmt.Printf("  Modified: %s (appended error capture)\n", action.Path)
+			case "insert":
+				fmt.Printf("  Modified: %s (added route)\n", action.Path)
+			}
+		}
+
+		// Stack-specific follow-up instructions
+		fmt.Println()
+		switch result.Stack {
+		case "ruby":
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		case "typescript":
+			fmt.Println("Import the capture file in your app entry point:")
+			fmt.Println("  import './.agentlog/capture';")
+			fmt.Println()
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		case "go":
+			fmt.Println("Add to your main.go:")
+			fmt.Println("  // import \".agentlog\"")
+			fmt.Println("  // call initAgentlog() at startup")
+			fmt.Println()
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		case "python":
+			fmt.Println("Add to your main module:")
+			fmt.Println("  from .agentlog.capture import init_agentlog")
+			fmt.Println("  init_agentlog()")
+			fmt.Println()
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		case "rust":
+			fmt.Println("Add to your main.rs:")
+			fmt.Println("  mod agentlog { include!(\".agentlog/capture.rs\"); }")
+			fmt.Println("  agentlog::init_agentlog();")
+			fmt.Println()
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		default:
+			fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+		}
+	} else {
+		// No installation - print snippet for manual copy/paste
+		fmt.Printf("Add this snippet to your %s code:\n\n", capitalize(result.Stack))
+		fmt.Println("---")
+		fmt.Println(result.Snippet)
+		fmt.Println("---")
+		fmt.Println()
+		fmt.Println("Done! Run 'agentlog tail' to watch for errors.")
+	}
 }
 
 func capitalize(s string) string {
@@ -451,3 +708,118 @@ end
 if defined?(Rails) && Rails.env.development?
   Rails.application.config.middleware.insert(0, Agentlog::ExceptionCatcher)
 end`
+
+// Installable snippet parts for --install flag
+
+const rubyController = `# agentlog:installed
+class AgentlogController < ApplicationController
+  skip_before_action :verify_authenticity_token, only: :create
+
+  def create
+    return head :not_found unless Rails.env.development?
+
+    FileUtils.mkdir_p('.agentlog')
+    File.open('.agentlog/errors.jsonl', 'a') do |f|
+      f.puts(request.raw_post)
+    end
+
+    head :ok
+  end
+end
+`
+
+const rubyInitializer = `# agentlog:installed
+require 'json'
+require 'fileutils'
+
+module Agentlog
+  class ExceptionCatcher
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      @app.call(env)
+    rescue Exception => e
+      log_error(e, env)
+      raise
+    end
+
+    private
+
+    def log_error(exception, env)
+      entry = {
+        timestamp: Time.now.utc.iso8601(3),
+        source: 'backend',
+        error_type: 'REQUEST_ERROR',
+        message: exception.message.to_s[0, 500],
+        context: {
+          stack_trace: exception.backtrace&.join("\n")&.slice(0, 2048),
+          endpoint: env['REQUEST_PATH'] || env['PATH_INFO'],
+          request_id: env['action_dispatch.request_id']
+        }.compact
+      }
+
+      FileUtils.mkdir_p('.agentlog')
+      File.open('.agentlog/errors.jsonl', 'a') do |f|
+        f.puts(entry.to_json)
+      end
+    end
+  end
+end
+
+# Add to middleware stack (only in development)
+if defined?(Rails) && Rails.env.development?
+  Rails.application.config.middleware.insert(0, Agentlog::ExceptionCatcher)
+end
+`
+
+const rubyRoute = `post '/__agentlog', to: 'agentlog#create' if Rails.env.development?`
+
+const rubyFrontendJS = `// agentlog:installed - Error capture for agentlog
+(function() {
+  const log = (type, msg, ctx) =>
+    fetch('/__agentlog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        source: 'frontend',
+        error_type: type,
+        message: String(msg).slice(0, 500),
+        context: ctx,
+      }),
+    }).catch(() => {});
+
+  window.onerror = (msg, src, line, col, err) =>
+    log('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
+
+  window.onunhandledrejection = (e) =>
+    log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
+})();
+`
+
+const typescriptCapture = `// agentlog:installed - Import this in your app entry point
+// Usage: import './.agentlog/capture';
+
+if (typeof window !== 'undefined') {
+  const log = (type: string, msg: unknown, ctx?: object) =>
+    fetch('/__agentlog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        source: 'frontend',
+        error_type: type,
+        message: String(msg).slice(0, 500),
+        context: ctx,
+      }),
+    }).catch(() => {});
+
+  window.onerror = (msg, src, line, col, err) =>
+    log('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
+
+  window.onunhandledrejection = (e) =>
+    log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
+}
+`

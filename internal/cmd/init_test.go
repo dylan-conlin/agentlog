@@ -18,7 +18,7 @@ func TestInitCommand_CreatesAgentlogDir(t *testing.T) {
 	// Create package.json to trigger TypeScript detection
 	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}"), 0644)
 
-	result, err := runInit(tmpDir, false, "")
+	result, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestInitCommand_CreatesAgentlogDir(t *testing.T) {
 func TestInitCommand_CreatesErrorsFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	_, err := runInit(tmpDir, false, "")
+	_, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestInitCommand_CreatesErrorsFile(t *testing.T) {
 func TestInitCommand_UpdatesGitignore_NewFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	result, err := runInit(tmpDir, false, "")
+	result, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestInitCommand_UpdatesGitignore_ExistingFile(t *testing.T) {
 	gitignore := filepath.Join(tmpDir, ".gitignore")
 	os.WriteFile(gitignore, []byte("node_modules/\n.env\n"), 0644)
 
-	_, err := runInit(tmpDir, false, "")
+	_, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestInitCommand_SkipsGitignore_AlreadyPresent(t *testing.T) {
 	gitignore := filepath.Join(tmpDir, ".gitignore")
 	os.WriteFile(gitignore, []byte(".agentlog/errors.jsonl\n"), 0644)
 
-	result, err := runInit(tmpDir, false, "")
+	result, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -143,7 +143,7 @@ func TestInitCommand_DetectsStack(t *testing.T) {
 			tmpDir := t.TempDir()
 			os.WriteFile(filepath.Join(tmpDir, tc.markerFile), []byte(""), 0644)
 
-			result, err := runInit(tmpDir, false, "")
+			result, err := runInit(tmpDir, false, "", false)
 			if err != nil {
 				t.Fatalf("init failed: %v", err)
 			}
@@ -162,7 +162,7 @@ func TestInitCommand_DetectsStack(t *testing.T) {
 func TestInitCommand_DefaultsToTypeScript(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	result, err := runInit(tmpDir, false, "")
+	result, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestInitCommand_StackOverride(t *testing.T) {
 	// Create package.json but override to Go
 	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}"), 0644)
 
-	result, err := runInit(tmpDir, false, "go")
+	result, err := runInit(tmpDir, false, "go", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -199,12 +199,12 @@ func TestInitCommand_Idempotent(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Run init twice
-	result1, err := runInit(tmpDir, false, "")
+	result1, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("first init failed: %v", err)
 	}
 
-	result2, err := runInit(tmpDir, false, "")
+	result2, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("second init failed: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestInitCommand_JSONOutput(t *testing.T) {
 	tmpDir := t.TempDir()
 	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}"), 0644)
 
-	result, err := runInit(tmpDir, false, "")
+	result, err := runInit(tmpDir, false, "", false)
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestInitCommand_ReturnsSnippet(t *testing.T) {
 		t.Run(tc.stack, func(t *testing.T) {
 			tmpDir := t.TempDir()
 
-			result, err := runInit(tmpDir, false, tc.stack)
+			result, err := runInit(tmpDir, false, tc.stack, false)
 			if err != nil {
 				t.Fatalf("init failed: %v", err)
 			}
@@ -659,5 +659,353 @@ func TestRubySnippet_RailsController(t *testing.T) {
 		strings.Contains(snippet, "controller")
 	if !hasController {
 		t.Error("Ruby snippet must include Rails controller or route handler")
+	}
+}
+
+// ========== --install flag tests ==========
+
+func TestInitInstall_Rails_CreatesController(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project structure
+	os.MkdirAll(filepath.Join(tmpDir, "config"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\n"), 0644)
+
+	result, err := runInit(tmpDir, false, "", true) // true = install
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check controller was created
+	controllerPath := filepath.Join(tmpDir, "app", "controllers", "agentlog_controller.rb")
+	content, err := os.ReadFile(controllerPath)
+	if err != nil {
+		t.Fatalf("controller not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "AgentlogController") {
+		t.Error("controller should contain AgentlogController class")
+	}
+
+	if !result.Installed {
+		t.Error("Installed should be true")
+	}
+}
+
+func TestInitInstall_Rails_CreatesInitializer(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project structure
+	os.MkdirAll(filepath.Join(tmpDir, "config", "initializers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check initializer was created
+	initializerPath := filepath.Join(tmpDir, "config", "initializers", "agentlog.rb")
+	content, err := os.ReadFile(initializerPath)
+	if err != nil {
+		t.Fatalf("initializer not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "Agentlog::ExceptionCatcher") {
+		t.Error("initializer should contain ExceptionCatcher middleware")
+	}
+}
+
+func TestInitInstall_Rails_ModifiesRoutes(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project structure
+	os.MkdirAll(filepath.Join(tmpDir, "config"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	routesContent := `Rails.application.routes.draw do
+  root 'home#index'
+end
+`
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(routesContent), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check route was added
+	content, err := os.ReadFile(filepath.Join(tmpDir, "config", "routes.rb"))
+	if err != nil {
+		t.Fatalf("failed to read routes.rb: %v", err)
+	}
+
+	if !strings.Contains(string(content), "__agentlog") {
+		t.Error("routes.rb should contain __agentlog route")
+	}
+
+	// Original content should be preserved
+	if !strings.Contains(string(content), "root 'home#index'") {
+		t.Error("routes.rb original content should be preserved")
+	}
+}
+
+func TestInitInstall_Rails_ModifiesApplicationJS(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project structure
+	os.MkdirAll(filepath.Join(tmpDir, "config"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\nimport '@hotwired/turbo-rails'\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check JS was appended
+	content, err := os.ReadFile(filepath.Join(tmpDir, "app", "javascript", "application.js"))
+	if err != nil {
+		t.Fatalf("failed to read application.js: %v", err)
+	}
+
+	if !strings.Contains(string(content), "window.onerror") {
+		t.Error("application.js should contain window.onerror")
+	}
+
+	// Original content should be preserved
+	if !strings.Contains(string(content), "@hotwired/turbo-rails") {
+		t.Error("application.js original content should be preserved")
+	}
+}
+
+func TestInitInstall_Rails_Idempotent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project structure
+	os.MkdirAll(filepath.Join(tmpDir, "config", "initializers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\n"), 0644)
+
+	// Run twice
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("first init --install failed: %v", err)
+	}
+
+	_, err = runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("second init --install failed: %v", err)
+	}
+
+	// Check no duplicate routes
+	routesContent, _ := os.ReadFile(filepath.Join(tmpDir, "config", "routes.rb"))
+	routeCount := strings.Count(string(routesContent), "__agentlog")
+	if routeCount != 1 {
+		t.Errorf("expected 1 agentlog route, found %d", routeCount)
+	}
+
+	// Check no duplicate JS
+	jsContent, _ := os.ReadFile(filepath.Join(tmpDir, "app", "javascript", "application.js"))
+	jsMarkerCount := strings.Count(string(jsContent), "window.onerror")
+	if jsMarkerCount != 1 {
+		t.Errorf("expected 1 window.onerror, found %d", jsMarkerCount)
+	}
+}
+
+func TestInitInstall_TypeScript_CreatesCaptureFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create package.json for TypeScript detection
+	os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte("{}"), 0644)
+
+	result, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check capture file was created
+	captureFile := filepath.Join(tmpDir, ".agentlog", "capture.ts")
+	content, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("capture.ts not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "window.onerror") {
+		t.Error("capture.ts should contain window.onerror")
+	}
+
+	if !result.Installed {
+		t.Error("Installed should be true")
+	}
+}
+
+func TestInitInstall_Go_CreatesCaptureFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create go.mod for Go detection
+	os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module test\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check capture file was created
+	captureFile := filepath.Join(tmpDir, ".agentlog", "capture.go")
+	content, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("capture.go not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "recover()") {
+		t.Error("capture.go should contain recover()")
+	}
+}
+
+func TestInitInstall_Python_CreatesCaptureFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create pyproject.toml for Python detection
+	os.WriteFile(filepath.Join(tmpDir, "pyproject.toml"), []byte("[project]\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check capture file was created
+	captureFile := filepath.Join(tmpDir, ".agentlog", "capture.py")
+	content, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("capture.py not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "sys.excepthook") {
+		t.Error("capture.py should contain sys.excepthook")
+	}
+}
+
+func TestInitInstall_Rust_CreatesCaptureFile(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create Cargo.toml for Rust detection
+	os.WriteFile(filepath.Join(tmpDir, "Cargo.toml"), []byte("[package]\n"), 0644)
+
+	_, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Check capture file was created
+	captureFile := filepath.Join(tmpDir, ".agentlog", "capture.rs")
+	content, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("capture.rs not created: %v", err)
+	}
+
+	if !strings.Contains(string(content), "panic::set_hook") {
+		t.Error("capture.rs should contain panic::set_hook")
+	}
+}
+
+func TestInitInstall_ReportsInstallActions(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project
+	os.MkdirAll(filepath.Join(tmpDir, "config", "initializers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "controllers"), 0755)
+	os.MkdirAll(filepath.Join(tmpDir, "app", "javascript"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+	os.WriteFile(filepath.Join(tmpDir, "app", "javascript", "application.js"), []byte("// Entry point\n"), 0644)
+
+	result, err := runInit(tmpDir, false, "", true)
+	if err != nil {
+		t.Fatalf("init --install failed: %v", err)
+	}
+
+	// Should have install actions in result
+	if len(result.InstallActions) == 0 {
+		t.Error("InstallActions should not be empty for Rails install")
+	}
+
+	// Check for expected actions
+	hasController := false
+	hasInitializer := false
+	hasRoute := false
+	hasJS := false
+
+	for _, action := range result.InstallActions {
+		if strings.Contains(action.Path, "agentlog_controller.rb") {
+			hasController = true
+		}
+		if strings.Contains(action.Path, "initializers/agentlog.rb") {
+			hasInitializer = true
+		}
+		if strings.Contains(action.Path, "routes.rb") {
+			hasRoute = true
+		}
+		if strings.Contains(action.Path, "application.js") {
+			hasJS = true
+		}
+	}
+
+	if !hasController {
+		t.Error("should report controller install action")
+	}
+	if !hasInitializer {
+		t.Error("should report initializer install action")
+	}
+	if !hasRoute {
+		t.Error("should report route install action")
+	}
+	if !hasJS {
+		t.Error("should report JS install action")
+	}
+}
+
+func TestInitInstall_WithoutFlag_NoInstall(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Setup Rails project
+	os.MkdirAll(filepath.Join(tmpDir, "config"), 0755)
+	os.WriteFile(filepath.Join(tmpDir, "config", "routes.rb"), []byte(`Rails.application.routes.draw do
+end
+`), 0644)
+
+	result, err := runInit(tmpDir, false, "", false) // false = no install
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+
+	// Should NOT create controller
+	controllerPath := filepath.Join(tmpDir, "app", "controllers", "agentlog_controller.rb")
+	if _, err := os.Stat(controllerPath); !os.IsNotExist(err) {
+		t.Error("controller should NOT be created without --install flag")
+	}
+
+	if result.Installed {
+		t.Error("Installed should be false without --install flag")
 	}
 }
