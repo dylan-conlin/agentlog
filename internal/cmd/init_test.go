@@ -604,3 +604,60 @@ func TestRubySnippet_StackTraceCapture(t *testing.T) {
 		t.Error("Ruby snippet must capture stack traces")
 	}
 }
+
+// Rails/Turbo frontend tests - for browser-side error capture
+
+func TestRubySnippet_FrontendErrorCapture(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must include frontend JavaScript for browser-side error capture
+	if !strings.Contains(snippet, "window.onerror") {
+		t.Error("Ruby snippet must include frontend JavaScript with window.onerror for browser-side error capture")
+	}
+
+	if !strings.Contains(snippet, "onunhandledrejection") {
+		t.Error("Ruby snippet must include frontend JavaScript with onunhandledrejection for promise errors")
+	}
+}
+
+func TestRubySnippet_AgentlogRoute(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must include Rails route for /__agentlog endpoint
+	if !strings.Contains(snippet, "__agentlog") {
+		t.Error("Ruby snippet must include /__agentlog route for frontend error posts")
+	}
+}
+
+func TestRubySnippet_FrontendNoVite(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Frontend JavaScript should NOT use Vite-specific APIs
+	if strings.Contains(snippet, "import.meta.env") {
+		t.Error("Ruby snippet frontend should not use import.meta.env (Vite-specific)")
+	}
+
+	if strings.Contains(snippet, "configureServer") {
+		t.Error("Ruby snippet should not include Vite plugin code")
+	}
+}
+
+func TestRubySnippet_FrontendFetch(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Frontend must use fetch API to POST errors
+	if !strings.Contains(snippet, "fetch") {
+		t.Error("Ruby snippet frontend must use fetch API")
+	}
+}
+
+func TestRubySnippet_RailsController(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must include Rails controller for handling /__agentlog endpoint
+	hasController := strings.Contains(snippet, "AgentlogController") ||
+		strings.Contains(snippet, "controller")
+	if !hasController {
+		t.Error("Ruby snippet must include Rails controller or route handler")
+	}
+}
