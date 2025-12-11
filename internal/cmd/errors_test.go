@@ -338,6 +338,48 @@ func TestFormatJSON(t *testing.T) {
 	}
 }
 
+func TestErrorsCommand_PathFlag(t *testing.T) {
+	// Create temp directory with test data in a subdirectory
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "packages", "api")
+	agentlogDir := filepath.Join(subDir, ".agentlog")
+	os.MkdirAll(agentlogDir, 0755)
+
+	// Write test errors in the subdirectory
+	errorsFile := filepath.Join(agentlogDir, "errors.jsonl")
+	os.WriteFile(errorsFile, []byte(
+		`{"timestamp":"2025-12-10T19:19:32.941Z","source":"backend","error_type":"API_ERROR","message":"Custom path error"}
+`), 0644)
+
+	// Save and restore original state
+	originalPath := pathOverride
+	defer func() { pathOverride = originalPath }()
+
+	// Set path override to the subdirectory
+	pathOverride = subDir
+
+	// Reset other flags
+	errorsLimit = 10
+	errorsSource = ""
+	errorsType = ""
+	errorsSince = ""
+	jsonOutput = false
+
+	buf := new(bytes.Buffer)
+	errorsCmd.SetOut(buf)
+	errorsCmd.SetErr(buf)
+
+	err := runErrors(errorsCmd, []string{})
+	if err != nil {
+		t.Fatalf("runErrors() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Custom path error") {
+		t.Errorf("output should contain error from custom path, got: %s", output)
+	}
+}
+
 func TestErrorsCommand_Integration(t *testing.T) {
 	// Create temp directory with test data
 	tmpDir := t.TempDir()
