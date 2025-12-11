@@ -483,25 +483,38 @@ func getSnippet(stack string) string {
 }
 
 const snippetTypeScript = `// === BROWSER (add to app entry point) ===
-if (typeof window !== 'undefined' && import.meta.env?.DEV !== false) {
-  const log = (type: string, msg: unknown, ctx?: object) =>
-    fetch('/__agentlog', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        timestamp: new Date().toISOString(),
-        source: 'frontend',
-        error_type: type,
-        message: String(msg).slice(0, 500),
-        context: ctx,
-      }),
-    }).catch(() => {});
+const _agentlogDev = typeof window !== 'undefined' && import.meta.env?.DEV !== false;
 
+const _sendLog = (type: string, msg: unknown, ctx?: object) => {
+  if (!_agentlogDev) return;
+  fetch('/__agentlog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      timestamp: new Date().toISOString(),
+      source: 'frontend',
+      error_type: type,
+      message: String(msg).slice(0, 500),
+      context: ctx,
+    }),
+  }).catch(() => {});
+};
+
+// Log caught errors - call from try/catch blocks
+export function logError(errorType: string, message: string, context?: object): void {
+  const ctx = context && typeof (context as any).stack_trace === 'string'
+    ? { ...context, stack_trace: ((context as any).stack_trace as string).slice(0, 2048) }
+    : context;
+  _sendLog(errorType, message, ctx);
+}
+
+// Automatic capture of uncaught errors
+if (_agentlogDev) {
   window.onerror = (msg, src, line, col, err) =>
-    log('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
+    _sendLog('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
 
   window.onunhandledrejection = (e) =>
-    log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
+    _sendLog('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
 }
 
 // === DEV SERVER (vite.config.ts or similar) ===
