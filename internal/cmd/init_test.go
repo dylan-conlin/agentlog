@@ -276,3 +276,58 @@ func TestInitCommand_ReturnsSnippet(t *testing.T) {
 		})
 	}
 }
+
+func TestTypeScriptSnippet_BrowserCompatible(t *testing.T) {
+	snippet := getSnippet("typescript")
+
+	// Should NOT use Node.js fs module (doesn't work in browser)
+	if strings.Contains(snippet, "require('fs')") {
+		t.Error("TypeScript snippet should not use require('fs') - not browser compatible")
+	}
+	if strings.Contains(snippet, "require('path')") {
+		t.Error("TypeScript snippet should not use require('path') - not browser compatible")
+	}
+
+	// Should use fetch API for browser compatibility
+	if !strings.Contains(snippet, "fetch") {
+		t.Error("TypeScript snippet should use fetch API for browser compatibility")
+	}
+}
+
+func TestTypeScriptSnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("typescript")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("TypeScript snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestTypeScriptSnippet_ErrorHandlers(t *testing.T) {
+	snippet := getSnippet("typescript")
+
+	// Must capture uncaught errors
+	if !strings.Contains(snippet, "window.onerror") {
+		t.Error("TypeScript snippet must capture uncaught errors via window.onerror")
+	}
+
+	// Must capture unhandled promise rejections
+	if !strings.Contains(snippet, "onunhandledrejection") {
+		t.Error("TypeScript snippet must capture unhandled promise rejections")
+	}
+}
+
+func TestTypeScriptSnippet_DevModeCheck(t *testing.T) {
+	snippet := getSnippet("typescript")
+
+	// Must check for development mode (should no-op in production)
+	hasDevCheck := strings.Contains(snippet, "NODE_ENV") ||
+		strings.Contains(snippet, "DEV") ||
+		strings.Contains(snippet, "development")
+	if !hasDevCheck {
+		t.Error("TypeScript snippet should check for development mode")
+	}
+}

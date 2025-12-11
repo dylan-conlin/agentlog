@@ -193,36 +193,46 @@ func getSnippet(stack string) string {
 	}
 }
 
-const snippetTypeScript = `// agentlog error handler - add to your app's entry point
-if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
-  const fs = require('fs');
-  const path = require('path');
+const snippetTypeScript = `// === BROWSER (add to app entry point) ===
+if (typeof window !== 'undefined' && import.meta.env?.DEV !== false) {
+  const log = (type: string, msg: unknown, ctx?: object) =>
+    fetch('/__agentlog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        source: 'frontend',
+        error_type: type,
+        message: String(msg).slice(0, 500),
+        context: ctx,
+      }),
+    }).catch(() => {});
 
-  const logError = (entry) => {
-    const file = path.join(process.cwd(), '.agentlog', 'errors.jsonl');
-    fs.appendFileSync(file, JSON.stringify(entry) + '\n');
-  };
+  window.onerror = (msg, src, line, col, err) =>
+    log('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
 
-  window.onerror = (msg, src, line, col, err) => {
-    logError({
-      timestamp: new Date().toISOString(),
-      source: 'frontend',
-      error_type: 'UNCAUGHT_ERROR',
-      message: String(msg).slice(0, 500),
-      context: { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) }
+  window.onunhandledrejection = (e) =>
+    log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
+}
+
+// === DEV SERVER (vite.config.ts or similar) ===
+// Add this plugin to handle /__agentlog POST requests:
+import { appendFileSync, mkdirSync } from 'fs';
+export const agentlogPlugin = () => ({
+  name: 'agentlog',
+  configureServer(server) {
+    server.middlewares.use('/__agentlog', (req, res) => {
+      if (req.method !== 'POST') return res.end();
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', () => {
+        mkdirSync('.agentlog', { recursive: true });
+        appendFileSync('.agentlog/errors.jsonl', body + '\n');
+        res.end('ok');
+      });
     });
-  };
-
-  window.onunhandledrejection = (event) => {
-    logError({
-      timestamp: new Date().toISOString(),
-      source: 'frontend',
-      error_type: 'UNHANDLED_REJECTION',
-      message: String(event.reason).slice(0, 500),
-      context: { stack_trace: event.reason?.stack?.slice(0, 2048) }
-    });
-  };
-}`
+  },
+});`
 
 const snippetGo = `// agentlog error handler - add to your main.go
 package main
