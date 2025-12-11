@@ -133,3 +133,88 @@ func TestIsJSONOutput(t *testing.T) {
 		t.Error("JSON output should be false by default")
 	}
 }
+
+func TestGetBaseDir(t *testing.T) {
+	// Save original state
+	originalPath := pathOverride
+
+	tests := []struct {
+		name         string
+		pathOverride string
+		want         string
+	}{
+		{
+			name:         "no override returns empty (caller uses cwd)",
+			pathOverride: "",
+			want:         "",
+		},
+		{
+			name:         "override returns custom path",
+			pathOverride: "/custom/project/path",
+			want:         "/custom/project/path",
+		},
+		{
+			name:         "relative path works",
+			pathOverride: "./subdir",
+			want:         "./subdir",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set path override
+			pathOverride = tt.pathOverride
+
+			got := GetPathOverride()
+			if got != tt.want {
+				t.Errorf("GetPathOverride() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	// Restore original state
+	pathOverride = originalPath
+}
+
+func TestGetErrorsPath(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseDir string
+		want    string
+	}{
+		{
+			name:    "constructs standard path",
+			baseDir: "/project",
+			want:    "/project/.agentlog/errors.jsonl",
+		},
+		{
+			name:    "handles trailing slash",
+			baseDir: "/project/",
+			want:    "/project/.agentlog/errors.jsonl",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetErrorsPath(tt.baseDir)
+			if got != tt.want {
+				t.Errorf("GetErrorsPath(%q) = %v, want %v", tt.baseDir, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPathFlagInGlobalFlags(t *testing.T) {
+	// Verify --path is documented in AI help output
+	buf := new(bytes.Buffer)
+	printAIHelpTo(buf)
+
+	var parsed CommandMetadata
+	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+
+	if _, ok := parsed.GlobalFlags["--path"]; !ok {
+		t.Error("global_flags should include --path")
+	}
+}
