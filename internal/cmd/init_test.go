@@ -1199,3 +1199,36 @@ func TestInitInstall_Node_CreatesCaptureFile(t *testing.T) {
 		t.Error("Installed should be true")
 	}
 }
+
+// Test that Node.js snippet updates .gitignore when creating .agentlog directory
+func TestNodeSnippet_UpdatesGitignore(t *testing.T) {
+	snippet := getSnippet("node")
+
+	// The snippet should include logic to update .gitignore
+	// when creating the .agentlog directory
+	if !strings.Contains(snippet, ".gitignore") {
+		t.Error("Node.js snippet should update .gitignore when creating .agentlog directory")
+	}
+
+	// Should append .agentlog/errors.jsonl to gitignore
+	if !strings.Contains(snippet, ".agentlog/errors.jsonl") {
+		t.Error("Node.js snippet should add .agentlog/errors.jsonl to .gitignore")
+	}
+
+	// Should use appendFileSync to update gitignore
+	if !strings.Contains(snippet, "appendFileSync") && !strings.Contains(snippet, "writeFileSync") {
+		t.Error("Node.js snippet should write to .gitignore file")
+	}
+}
+
+// Test that nodeCapture constant (used in --install) also updates .gitignore
+func TestNodeCapture_UpdatesGitignore(t *testing.T) {
+	// nodeCapture is the installable version of the Node.js snippet
+	if !strings.Contains(nodeCapture, ".gitignore") {
+		t.Error("nodeCapture should update .gitignore when creating .agentlog directory")
+	}
+
+	if !strings.Contains(nodeCapture, ".agentlog/errors.jsonl") {
+		t.Error("nodeCapture should add .agentlog/errors.jsonl to .gitignore")
+	}
+}

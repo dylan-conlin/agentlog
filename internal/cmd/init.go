@@ -525,7 +525,7 @@ export const agentlogPlugin = () => ({
 
 const snippetNode = `// agentlog error handler for Node.js - add to your app entry point
 // Works with BullMQ workers, scrapers, CLI tools, and any Node.js service
-import { appendFileSync, mkdirSync, existsSync } from 'fs';
+import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
 
 const AGENTLOG_FILE = '.agentlog/errors.jsonl';
 
@@ -566,6 +566,22 @@ export function logError(
   try {
     if (!existsSync('.agentlog')) {
       mkdirSync('.agentlog', { recursive: true });
+
+      // Update .gitignore
+      const gitignorePath = '.gitignore';
+      const gitignoreEntry = '.agentlog/errors.jsonl';
+      let gitignoreContent = '';
+
+      if (existsSync(gitignorePath)) {
+        gitignoreContent = readFileSync(gitignorePath, 'utf-8');
+      }
+
+      if (!gitignoreContent.includes(gitignoreEntry)) {
+        const newContent = gitignoreContent === ''
+          ? gitignoreEntry + '\n'
+          : gitignoreContent + (gitignoreContent.endsWith('\n') ? '' : '\n') + gitignoreEntry + '\n';
+        writeFileSync(gitignorePath, newContent);
+      }
     }
     appendFileSync(AGENTLOG_FILE, JSON.stringify(entry) + '\n');
   } catch {
@@ -939,7 +955,7 @@ const nodeCapture = `// agentlog:installed - Import this in your Node.js app ent
 // Usage: import './.agentlog/capture';
 // Works with BullMQ workers, scrapers, CLI tools, and any Node.js service
 
-import { appendFileSync, mkdirSync, existsSync } from 'fs';
+import { appendFileSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'fs';
 
 const AGENTLOG_FILE = '.agentlog/errors.jsonl';
 
@@ -980,6 +996,22 @@ export function logError(
   try {
     if (!existsSync('.agentlog')) {
       mkdirSync('.agentlog', { recursive: true });
+
+      // Update .gitignore
+      const gitignorePath = '.gitignore';
+      const gitignoreEntry = '.agentlog/errors.jsonl';
+      let gitignoreContent = '';
+
+      if (existsSync(gitignorePath)) {
+        gitignoreContent = readFileSync(gitignorePath, 'utf-8');
+      }
+
+      if (!gitignoreContent.includes(gitignoreEntry)) {
+        const newContent = gitignoreContent === ''
+          ? gitignoreEntry + '\n'
+          : gitignoreContent + (gitignoreContent.endsWith('\n') ? '' : '\n') + gitignoreEntry + '\n';
+        writeFileSync(gitignorePath, newContent);
+      }
     }
     appendFileSync(AGENTLOG_FILE, JSON.stringify(entry) + '\n');
   } catch {
