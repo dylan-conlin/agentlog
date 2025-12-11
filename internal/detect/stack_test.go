@@ -50,6 +50,18 @@ func TestDetectStack(t *testing.T) {
 			expectedDetect: true,
 		},
 		{
+			name:           "config/routes.rb detected as Ruby (Rails-specific)",
+			files:          []string{"config/routes.rb"},
+			expectedStack:  Ruby,
+			expectedDetect: true,
+		},
+		{
+			name:           "config/routes.rb takes priority over package.json (Rails with npm)",
+			files:          []string{"package.json", "config/routes.rb"},
+			expectedStack:  Ruby,
+			expectedDetect: true,
+		},
+		{
 			name:           "package.json takes priority over go.mod",
 			files:          []string{"package.json", "go.mod"},
 			expectedStack:  TypeScript,
@@ -80,9 +92,13 @@ func TestDetectStack(t *testing.T) {
 			// Create temp directory
 			tmpDir := t.TempDir()
 
-			// Create marker files
+			// Create marker files (including parent directories for nested paths)
 			for _, file := range tc.files {
 				path := filepath.Join(tmpDir, file)
+				// Create parent directory if needed (for paths like config/routes.rb)
+				if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+					t.Fatalf("failed to create parent directory for %s: %v", file, err)
+				}
 				if err := os.WriteFile(path, []byte(""), 0644); err != nil {
 					t.Fatalf("failed to create test file %s: %v", file, err)
 				}
