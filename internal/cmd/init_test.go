@@ -331,3 +331,193 @@ func TestTypeScriptSnippet_DevModeCheck(t *testing.T) {
 		t.Error("TypeScript snippet should check for development mode")
 	}
 }
+
+// Rust snippet tests
+
+func TestRustSnippet_UsesSerde(t *testing.T) {
+	snippet := getSnippet("rust")
+
+	// Must use serde_json for serialization (per task spec)
+	if !strings.Contains(snippet, "serde_json") {
+		t.Error("Rust snippet must use serde_json for serialization")
+	}
+}
+
+func TestRustSnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("rust")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("Rust snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestRustSnippet_PanicHandler(t *testing.T) {
+	snippet := getSnippet("rust")
+
+	// Must capture panics
+	if !strings.Contains(snippet, "panic::set_hook") {
+		t.Error("Rust snippet must capture panics via panic::set_hook")
+	}
+}
+
+func TestRustSnippet_ProductionNoOp(t *testing.T) {
+	snippet := getSnippet("rust")
+
+	// Must check for production mode (should no-op in production)
+	hasProductionCheck := strings.Contains(snippet, "PRODUCTION") ||
+		strings.Contains(snippet, "production")
+	if !hasProductionCheck {
+		t.Error("Rust snippet should check for production mode and no-op")
+	}
+}
+
+func TestRustSnippet_WritesToCorrectFile(t *testing.T) {
+	snippet := getSnippet("rust")
+
+	// Must write to correct file
+	if !strings.Contains(snippet, ".agentlog/errors.jsonl") {
+		t.Error("Rust snippet must write to .agentlog/errors.jsonl")
+	}
+}
+
+// Python snippet tests
+
+func TestPythonSnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("python")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("Python snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestPythonSnippet_ExceptionHandler(t *testing.T) {
+	snippet := getSnippet("python")
+
+	// Must capture exceptions via sys.excepthook
+	if !strings.Contains(snippet, "sys.excepthook") {
+		t.Error("Python snippet must capture exceptions via sys.excepthook")
+	}
+}
+
+func TestPythonSnippet_DevModeCheck(t *testing.T) {
+	snippet := getSnippet("python")
+
+	// Must check for production mode (should no-op in production)
+	hasDevCheck := strings.Contains(snippet, "ENV") ||
+		strings.Contains(snippet, "production") ||
+		strings.Contains(snippet, "PRODUCTION")
+	if !hasDevCheck {
+		t.Error("Python snippet should check for production mode")
+	}
+}
+
+func TestPythonSnippet_StdlibOnly(t *testing.T) {
+	snippet := getSnippet("python")
+
+	// Should only use stdlib modules (json, sys, os, traceback, datetime, pathlib)
+	// No external deps like requests, logging frameworks, etc.
+	bannedImports := []string{"import requests", "import httpx", "import aiohttp"}
+	for _, banned := range bannedImports {
+		if strings.Contains(snippet, banned) {
+			t.Errorf("Python snippet should not use external dependency: %s", banned)
+		}
+	}
+
+	// Must have json import for JSONL writing
+	if !strings.Contains(snippet, "import json") {
+		t.Error("Python snippet must import json")
+	}
+}
+
+func TestPythonSnippet_WritesToCorrectPath(t *testing.T) {
+	snippet := getSnippet("python")
+
+	// Must write to .agentlog/errors.jsonl
+	if !strings.Contains(snippet, ".agentlog") || !strings.Contains(snippet, "errors.jsonl") {
+		t.Error("Python snippet must write to .agentlog/errors.jsonl")
+	}
+}
+
+// Go snippet tests
+
+func TestGoSnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("Go snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestGoSnippet_PanicRecovery(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must capture panics via recover()
+	if !strings.Contains(snippet, "recover()") {
+		t.Error("Go snippet must capture panics via recover()")
+	}
+
+	// Must use debug.Stack() for stack traces
+	if !strings.Contains(snippet, "debug.Stack()") {
+		t.Error("Go snippet must capture stack traces via debug.Stack()")
+	}
+}
+
+func TestGoSnippet_DevModeCheck(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must check for production mode (should no-op in production)
+	hasProductionCheck := strings.Contains(snippet, "PRODUCTION") ||
+		strings.Contains(snippet, "production")
+	if !hasProductionCheck {
+		t.Error("Go snippet should check for production mode to no-op")
+	}
+}
+
+func TestGoSnippet_StackTraceCapture(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must capture stack traces in context
+	if !strings.Contains(snippet, "stack_trace") {
+		t.Error("Go snippet must include stack_trace in context")
+	}
+
+	// Must truncate stack trace per schema (2048 bytes)
+	if !strings.Contains(snippet, "2048") {
+		t.Error("Go snippet must truncate stack_trace to 2048 bytes per schema")
+	}
+}
+
+func TestGoSnippet_MessageTruncation(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must truncate message per schema (500 chars)
+	if !strings.Contains(snippet, "500") {
+		t.Error("Go snippet must truncate message to 500 characters per schema")
+	}
+}
+
+func TestGoSnippet_FileWriting(t *testing.T) {
+	snippet := getSnippet("go")
+
+	// Must write to .agentlog/errors.jsonl
+	if !strings.Contains(snippet, ".agentlog/errors.jsonl") {
+		t.Error("Go snippet must write to .agentlog/errors.jsonl")
+	}
+
+	// Must use append mode
+	if !strings.Contains(snippet, "O_APPEND") {
+		t.Error("Go snippet must use O_APPEND mode for file writing")
+	}
+}
