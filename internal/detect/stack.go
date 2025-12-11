@@ -44,15 +44,27 @@ var markerPriority = []struct {
 	{"Gemfile", Ruby},
 }
 
+// monorepoSubdirs are common subdirectory patterns in monorepos
+// Order matters: backend is checked before api, server
+var monorepoSubdirs = []string{
+	"backend",
+	"api",
+	"server",
+}
+
 // DetectStack detects the project's tech stack based on marker files
 func DetectStack(dir string) DetectionResult {
-	for _, marker := range markerPriority {
-		path := filepath.Join(dir, marker.file)
-		if _, err := os.Stat(path); err == nil {
-			return DetectionResult{
-				Stack:      marker.stack,
-				Detected:   true,
-				MarkerFile: marker.file,
+	// First, check root level
+	if result := detectInDir(dir, ""); result.Detected {
+		return result
+	}
+
+	// Then, check common monorepo subdirectories
+	for _, subdir := range monorepoSubdirs {
+		subdirPath := filepath.Join(dir, subdir)
+		if info, err := os.Stat(subdirPath); err == nil && info.IsDir() {
+			if result := detectInDir(subdirPath, subdir); result.Detected {
+				return result
 			}
 		}
 	}
@@ -63,4 +75,24 @@ func DetectStack(dir string) DetectionResult {
 		Detected:   false,
 		MarkerFile: "",
 	}
+}
+
+// detectInDir checks for marker files in a specific directory
+// prefix is prepended to MarkerFile (e.g., "backend" -> "backend/go.mod")
+func detectInDir(dir, prefix string) DetectionResult {
+	for _, marker := range markerPriority {
+		path := filepath.Join(dir, marker.file)
+		if _, err := os.Stat(path); err == nil {
+			markerFile := marker.file
+			if prefix != "" {
+				markerFile = filepath.Join(prefix, marker.file)
+			}
+			return DetectionResult{
+				Stack:      marker.stack,
+				Detected:   true,
+				MarkerFile: markerFile,
+			}
+		}
+	}
+	return DetectionResult{Detected: false}
 }
