@@ -3,3 +3,4 @@
 # Orchestration directory (solo project)
 .orch/
 /agentlog
+.agentlog/errors.jsonl
