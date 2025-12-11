@@ -11,7 +11,7 @@
 **Owner:** Worker agent (agentlog-ija)
 **Phase:** Complete
 **Next Step:** Design phase
-**Status:** Active
+**Status:** Complete
 **Confidence:** High (90%)
 
 ---
@@ -120,9 +120,21 @@ Clear schema spec, established CLI patterns, well-defined filter requirements. S
 
 ---
 
+## Deliverables
+
+- `internal/cmd/errors.go` - Errors command implementation
+- `internal/cmd/errors_test.go` - Comprehensive tests (unit + integration)
+- `docs/designs/2025-12-10-errors-command.md` - Design document
+
 ## Investigation History
 
 **2025-12-10:** Investigation started
 - Analyzed CLI scaffold structure
 - Read JSONL schema specification
 - Identified patterns to follow
+
+**2025-12-10:** Implementation complete
+- Created design document
+- Implemented errors command with TDD
+- All tests passing
+- CLI verified with real data
