@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -87,8 +88,13 @@ func IsTTY() bool {
 	return (fileInfo.Mode() & os.ModeCharDevice) != 0
 }
 
-// printAIHelp outputs machine-readable metadata for AI agents
+// printAIHelp outputs machine-readable metadata for AI agents to stdout
 func printAIHelp() {
+	printAIHelpTo(os.Stdout)
+}
+
+// printAIHelpTo outputs machine-readable metadata for AI agents to the given writer
+func printAIHelpTo(w io.Writer) {
 	metadata := CommandMetadata{
 		Name:        "agentlog",
 		Version:     "0.1.0",
@@ -133,5 +139,5 @@ func printAIHelp() {
 	}
 
 	output, _ := json.MarshalIndent(metadata, "", "  ")
-	fmt.Println(string(output))
+	fmt.Fprintln(w, string(output))
 }
