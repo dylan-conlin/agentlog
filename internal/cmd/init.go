@@ -365,7 +365,49 @@ pub fn init_agentlog() {
 // Call at application startup
 // fn main() { init_agentlog(); ... }`
 
-const snippetRuby = `# agentlog error handler for Rails - add to config/initializers/agentlog.rb
+const snippetRuby = `# === BROWSER (add to app/javascript/application.js) ===
+// Error capture for agentlog - sends frontend errors to /__agentlog endpoint
+(function() {
+  const log = (type, msg, ctx) =>
+    fetch('/__agentlog', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        timestamp: new Date().toISOString(),
+        source: 'frontend',
+        error_type: type,
+        message: String(msg).slice(0, 500),
+        context: ctx,
+      }),
+    }).catch(() => {});
+
+  window.onerror = (msg, src, line, col, err) =>
+    log('UNCAUGHT_ERROR', msg, { file: src, line, column: col, stack_trace: err?.stack?.slice(0, 2048) });
+
+  window.onunhandledrejection = (e) =>
+    log('UNHANDLED_REJECTION', e.reason, { stack_trace: e.reason?.stack?.slice(0, 2048) });
+})();
+
+# === RAILS CONTROLLER (app/controllers/agentlog_controller.rb) ===
+class AgentlogController < ApplicationController
+  skip_before_action :verify_authenticity_token, only: :create
+
+  def create
+    return head :not_found unless Rails.env.development?
+
+    FileUtils.mkdir_p('.agentlog')
+    File.open('.agentlog/errors.jsonl', 'a') do |f|
+      f.puts(request.raw_post)
+    end
+
+    head :ok
+  end
+end
+
+# === ROUTE (add to config/routes.rb) ===
+post '/__agentlog', to: 'agentlog#create' if Rails.env.development?
+
+# === BACKEND MIDDLEWARE (add to config/initializers/agentlog.rb) ===
 require 'json'
 require 'fileutils'
 
