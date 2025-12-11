@@ -36,11 +36,15 @@ func init() {
 }
 
 func runTail(cmd *cobra.Command, args []string) error {
-	// Get current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		self.LogError(".", "GETWD_ERROR", err.Error())
-		return fmt.Errorf("failed to get working directory: %w", err)
+	// Determine base directory (use --path override or cwd)
+	baseDir := GetPathOverride()
+	if baseDir == "" {
+		var err error
+		baseDir, err = os.Getwd()
+		if err != nil {
+			self.LogError(".", "GETWD_ERROR", err.Error())
+			return fmt.Errorf("failed to get working directory: %w", err)
+		}
 	}
 
 	// Set up signal handling for graceful shutdown
@@ -55,7 +59,7 @@ func runTail(cmd *cobra.Command, args []string) error {
 	}()
 
 	// Run tail
-	err = tailFile(ctx, cwd, cmd.OutOrStdout(), IsJSONOutput())
+	err := tailFile(ctx, baseDir, cmd.OutOrStdout(), IsJSONOutput())
 	if err != nil && err != context.Canceled {
 		if os.IsNotExist(err) {
 			fmt.Fprintln(cmd.OutOrStdout(), "No errors file found. Run 'agentlog init' to set up.")

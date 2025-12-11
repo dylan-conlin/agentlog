@@ -170,3 +170,40 @@ func TestTailFile_JSONOutput(t *testing.T) {
 		t.Error("JSON output should contain the error message")
 	}
 }
+
+func TestTailCommand_PathFlag(t *testing.T) {
+	// Create temp directory with test data in a subdirectory (monorepo scenario)
+	tmpDir := t.TempDir()
+	subDir := filepath.Join(tmpDir, "packages", "worker")
+	agentlogDir := filepath.Join(subDir, ".agentlog")
+	os.MkdirAll(agentlogDir, 0755)
+
+	// Write test errors in the subdirectory
+	errorsFile := filepath.Join(agentlogDir, "errors.jsonl")
+	os.WriteFile(errorsFile, []byte(
+		`{"timestamp":"2025-12-10T19:19:32.941Z","source":"worker","error_type":"QUEUE_ERROR","message":"Custom path tail error"}
+`), 0644)
+
+	// Save and restore original state
+	originalPath := pathOverride
+	defer func() { pathOverride = originalPath }()
+
+	// Set path override to the subdirectory
+	pathOverride = subDir
+
+	buf := new(bytes.Buffer)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	// Use tailFile directly with the resolved base directory
+	baseDir := GetPathOverride()
+	err := tailFile(ctx, baseDir, buf, false)
+	if err != nil && err != context.DeadlineExceeded {
+		t.Fatalf("tailFile() error = %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Custom path tail error") {
+		t.Errorf("output should contain error from custom path, got: %s", output)
+	}
+}
