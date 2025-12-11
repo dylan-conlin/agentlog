@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/agentlog/agentlog/internal/self"
 	"github.com/spf13/cobra"
 )
 
@@ -38,6 +39,7 @@ func runTail(cmd *cobra.Command, args []string) error {
 	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
+		self.LogError(".", "GETWD_ERROR", err.Error())
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 

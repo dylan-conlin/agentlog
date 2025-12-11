@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/agentlog/agentlog/internal/detect"
+	"github.com/agentlog/agentlog/internal/self"
 	"github.com/spf13/cobra"
 )
 
@@ -46,6 +47,7 @@ Examples:
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
+			self.LogError(".", "GETWD_ERROR", err.Error())
 			return fmt.Errorf("failed to get current directory: %w", err)
 		}
 
@@ -92,6 +94,7 @@ func runInit(dir string, force bool, stackOverride string) (*InitResult, error) 
 	agentlogDir := filepath.Join(dir, ".agentlog")
 	if _, err := os.Stat(agentlogDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(agentlogDir, 0755); err != nil {
+			self.LogError(dir, "MKDIR_ERROR", fmt.Sprintf("failed to create .agentlog directory: %v", err))
 			return nil, fmt.Errorf("failed to create .agentlog directory: %w", err)
 		}
 		result.DirCreated = true
@@ -101,6 +104,7 @@ func runInit(dir string, force bool, stackOverride string) (*InitResult, error) 
 	errorsFile := filepath.Join(agentlogDir, "errors.jsonl")
 	if _, err := os.Stat(errorsFile); os.IsNotExist(err) {
 		if err := os.WriteFile(errorsFile, []byte{}, 0644); err != nil {
+			self.LogError(dir, "FILE_CREATE_ERROR", fmt.Sprintf("failed to create errors.jsonl: %v", err))
 			return nil, fmt.Errorf("failed to create errors.jsonl: %w", err)
 		}
 	}
@@ -111,6 +115,7 @@ func runInit(dir string, force bool, stackOverride string) (*InitResult, error) 
 
 	gitignoreContent, err := os.ReadFile(gitignorePath)
 	if err != nil && !os.IsNotExist(err) {
+		self.LogError(dir, "FILE_READ_ERROR", fmt.Sprintf("failed to read .gitignore: %v", err))
 		return nil, fmt.Errorf("failed to read .gitignore: %w", err)
 	}
 
@@ -127,6 +132,7 @@ func runInit(dir string, force bool, stackOverride string) (*InitResult, error) 
 		}
 
 		if err := os.WriteFile(gitignorePath, []byte(newContent), 0644); err != nil {
+			self.LogError(dir, "FILE_WRITE_ERROR", fmt.Sprintf("failed to update .gitignore: %v", err))
 			return nil, fmt.Errorf("failed to update .gitignore: %w", err)
 		}
 		result.GitIgnored = true

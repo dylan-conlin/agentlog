@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentlog/agentlog/internal/self"
 	"github.com/spf13/cobra"
 )
 
@@ -60,6 +61,7 @@ func runErrors(cmd *cobra.Command, args []string) error {
 	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
+		self.LogError(".", "GETWD_ERROR", err.Error())
 		return fmt.Errorf("failed to get working directory: %w", err)
 	}
 
@@ -83,6 +85,7 @@ func runErrors(cmd *cobra.Command, args []string) error {
 	if errorsSince != "" {
 		sinceTime, err = parseSince(errorsSince)
 		if err != nil {
+			self.LogError(cwd, "INVALID_INPUT", fmt.Sprintf("invalid --since value '%s': %v", errorsSince, err))
 			return fmt.Errorf("invalid --since value: %w", err)
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agentlog/agentlog/internal/self"
 	"github.com/spf13/cobra"
 )
 
@@ -84,6 +85,7 @@ func generatePrimeSummary() (PrimeSummary, error) {
 	// Get current working directory
 	cwd, err := os.Getwd()
 	if err != nil {
+		self.LogError(".", "GETWD_ERROR", err.Error())
 		return summary, err
 	}
 
