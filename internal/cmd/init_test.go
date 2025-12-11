@@ -334,6 +334,21 @@ func TestTypeScriptSnippet_DevModeCheck(t *testing.T) {
 	}
 }
 
+func TestTypeScriptSnippet_ExportsLogError(t *testing.T) {
+	snippet := getSnippet("typescript")
+
+	// Must export logError function for manual error logging (caught errors)
+	if !strings.Contains(snippet, "logError") {
+		t.Error("TypeScript snippet must export logError function for caught errors")
+	}
+
+	// logError should accept errorType, message, and optional context (matching Node.js API)
+	if !strings.Contains(snippet, "function logError") || !strings.Contains(snippet, "export function logError") {
+		// Should be exported for use in try/catch blocks
+		t.Error("TypeScript snippet must have exported logError function")
+	}
+}
+
 // Rust snippet tests
 
 func TestRustSnippet_UsesSerde(t *testing.T) {
