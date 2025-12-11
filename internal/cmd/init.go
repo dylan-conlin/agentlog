@@ -194,6 +194,8 @@ func getSnippet(stack string) string {
 		return snippetPython
 	case "rust":
 		return snippetRust
+	case "ruby":
+		return snippetRuby
 	default:
 		return snippetTypeScript
 	}
@@ -362,3 +364,48 @@ pub fn init_agentlog() {
 
 // Call at application startup
 // fn main() { init_agentlog(); ... }`
+
+const snippetRuby = `# agentlog error handler for Rails - add to config/initializers/agentlog.rb
+require 'json'
+require 'fileutils'
+
+module Agentlog
+  class ExceptionCatcher
+    def initialize(app)
+      @app = app
+    end
+
+    def call(env)
+      @app.call(env)
+    rescue Exception => e
+      log_error(e, env)
+      raise
+    end
+
+    private
+
+    def log_error(exception, env)
+      entry = {
+        timestamp: Time.now.utc.iso8601(3),
+        source: 'backend',
+        error_type: 'REQUEST_ERROR',
+        message: exception.message.to_s[0, 500],
+        context: {
+          stack_trace: exception.backtrace&.join("\n")&.slice(0, 2048),
+          endpoint: env['REQUEST_PATH'] || env['PATH_INFO'],
+          request_id: env['action_dispatch.request_id']
+        }.compact
+      }
+
+      FileUtils.mkdir_p('.agentlog')
+      File.open('.agentlog/errors.jsonl', 'a') do |f|
+        f.puts(entry.to_json)
+      end
+    end
+  end
+end
+
+# Add to middleware stack (only in development)
+if defined?(Rails) && Rails.env.development?
+  Rails.application.config.middleware.insert(0, Agentlog::ExceptionCatcher)
+end`

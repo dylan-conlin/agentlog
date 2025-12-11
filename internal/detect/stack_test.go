@@ -44,6 +44,12 @@ func TestDetectStack(t *testing.T) {
 			expectedDetect: true,
 		},
 		{
+			name:           "Gemfile detected as Ruby",
+			files:          []string{"Gemfile"},
+			expectedStack:  Ruby,
+			expectedDetect: true,
+		},
+		{
 			name:           "package.json takes priority over go.mod",
 			files:          []string{"package.json", "go.mod"},
 			expectedStack:  TypeScript,
@@ -105,6 +111,7 @@ func TestStackString(t *testing.T) {
 		{Go, "go"},
 		{Python, "python"},
 		{Rust, "rust"},
+		{Ruby, "ruby"},
 	}
 
 	for _, tc := range tests {
@@ -125,6 +132,7 @@ func TestStackMarkerFile(t *testing.T) {
 		{Go, "go.mod"},
 		{Python, "pyproject.toml"},
 		{Rust, "Cargo.toml"},
+		{Ruby, "Gemfile"},
 	}
 
 	for _, tc := range tests {

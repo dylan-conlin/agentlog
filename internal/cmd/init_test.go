@@ -135,6 +135,7 @@ func TestInitCommand_DetectsStack(t *testing.T) {
 		{"Go", "go.mod", "go"},
 		{"Python", "pyproject.toml", "python"},
 		{"Rust", "Cargo.toml", "rust"},
+		{"Ruby", "Gemfile", "ruby"},
 	}
 
 	for _, tc := range tests {
@@ -259,6 +260,7 @@ func TestInitCommand_ReturnsSnippet(t *testing.T) {
 		{"go", "recover()"},
 		{"python", "sys.excepthook"},
 		{"rust", "panic::set_hook"},
+		{"ruby", "rescue"},
 	}
 
 	for _, tc := range tests {
@@ -519,5 +521,86 @@ func TestGoSnippet_FileWriting(t *testing.T) {
 	// Must use append mode
 	if !strings.Contains(snippet, "O_APPEND") {
 		t.Error("Go snippet must use O_APPEND mode for file writing")
+	}
+}
+
+// Ruby snippet tests
+
+func TestRubySnippet_RequiredJSONLFields(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must include all required JSONL fields per schema
+	requiredFields := []string{"timestamp", "source", "error_type", "message"}
+	for _, field := range requiredFields {
+		if !strings.Contains(snippet, field) {
+			t.Errorf("Ruby snippet must include required JSONL field: %s", field)
+		}
+	}
+}
+
+func TestRubySnippet_ExceptionHandler(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must capture exceptions via middleware or rescue
+	hasExceptionCapture := strings.Contains(snippet, "rescue") ||
+		strings.Contains(snippet, "Exception")
+	if !hasExceptionCapture {
+		t.Error("Ruby snippet must capture exceptions via rescue or Exception handling")
+	}
+}
+
+func TestRubySnippet_RailsDevModeCheck(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must check for Rails development environment
+	hasRailsEnvCheck := strings.Contains(snippet, "Rails.env") ||
+		strings.Contains(snippet, "development")
+	if !hasRailsEnvCheck {
+		t.Error("Ruby snippet should check for Rails development environment")
+	}
+}
+
+func TestRubySnippet_StdlibOnly(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Should only use stdlib/Rails core gems
+	// No external gems like sentry-ruby, rollbar, etc.
+	bannedGems := []string{"require 'sentry'", "require 'rollbar'", "require 'bugsnag'"}
+	for _, banned := range bannedGems {
+		if strings.Contains(snippet, banned) {
+			t.Errorf("Ruby snippet should not use external gem: %s", banned)
+		}
+	}
+
+	// Must have json require for JSONL writing
+	if !strings.Contains(snippet, "json") {
+		t.Error("Ruby snippet must use json for JSONL writing")
+	}
+}
+
+func TestRubySnippet_WritesToCorrectPath(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must write to .agentlog/errors.jsonl
+	if !strings.Contains(snippet, ".agentlog") || !strings.Contains(snippet, "errors.jsonl") {
+		t.Error("Ruby snippet must write to .agentlog/errors.jsonl")
+	}
+}
+
+func TestRubySnippet_SourceIsBackend(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must set source to 'backend'
+	if !strings.Contains(snippet, "backend") {
+		t.Error("Ruby snippet must set source to 'backend'")
+	}
+}
+
+func TestRubySnippet_StackTraceCapture(t *testing.T) {
+	snippet := getSnippet("ruby")
+
+	// Must capture stack traces (backtrace in Ruby)
+	if !strings.Contains(snippet, "backtrace") && !strings.Contains(snippet, "stack_trace") {
+		t.Error("Ruby snippet must capture stack traces")
 	}
 }

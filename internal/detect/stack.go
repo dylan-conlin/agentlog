@@ -13,6 +13,7 @@ const (
 	Go         Stack = "go"
 	Python     Stack = "python"
 	Rust       Stack = "rust"
+	Ruby       Stack = "ruby"
 )
 
 // String returns the string representation of the stack
@@ -37,6 +38,7 @@ var markerPriority = []struct {
 	{"pyproject.toml", Python},
 	{"requirements.txt", Python},
 	{"Cargo.toml", Rust},
+	{"Gemfile", Ruby},
 }
 
 // DetectStack detects the project's tech stack based on marker files
