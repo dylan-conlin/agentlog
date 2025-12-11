@@ -2,3 +2,4 @@
 
 # Orchestration directory (solo project)
 .orch/
+/agentlog
